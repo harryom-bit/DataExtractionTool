@@ -1,0 +1,1 @@
+mdvc_cum_reads,org_mdvc_cum_reads,mdvc_lp_data,org_mdvc_lp_data,lp_attribute_config,mdvc_lp_header,EXCEPTION_RECENT_CHECKOUT,EXCEPTION_DETAILS,EXCEPTION_DETAILS_ARCHIVE,EXCEPTION_MDVC_READS_UPDATE,EXCEPTION_ROLLUPS,

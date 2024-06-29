@@ -1,1 +1,0 @@
-dgm_scd,dgm_group,DGM_GROUP_MEMBER,dgm_component_profile,dgm_component_rule_detail,dgm_group_component_map

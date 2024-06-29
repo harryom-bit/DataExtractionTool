@@ -11,6 +11,13 @@ public class TableFilters {
 	private Date affectedDate;
 	private String timeSeries;
 	private int bufferDays;
+	private String caseNumber;
+	public String getCaseNumber() {
+		return caseNumber;
+	}
+	public void setCaseNumber(String caseNumber) {
+		this.caseNumber = caseNumber;
+	}
 	
 	public int getBufferDays() {
 		return bufferDays;
@@ -59,5 +66,12 @@ public class TableFilters {
 	}
 	public void setTo(Date to) {
 		this.to = to;
+	}
+	@Override
+	public String toString() {
+		return "TableFilters [meterId=" + meterId + ", sdpId=" + sdpId + ", from=" + from + ", to=" + to + ", adoId="
+				+ adoId + ", affectedDate=" + affectedDate + ", timeSeries=" + timeSeries + ", bufferDays=" + bufferDays
+				+ ", caseNumber=" + caseNumber + "]";
 	}	
+	
 }

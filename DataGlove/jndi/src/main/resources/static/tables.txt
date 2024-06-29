@@ -1,1 +1,1 @@
-mdvc_cum_reads,org_mdvc_cum_reads,mdvc_lp_data,org_mdvc_lp_data,lp_attribute_config,mdvc_lp_header,APPLICATION_LOG
+mdvc_cum_reads,org_mdvc_cum_reads,mdvc_lp_data,org_mdvc_lp_data,lp_attribute_config,mdvc_lp_header,APPLICATION_LOG,EXCEPTION_ROLLUPS,EXCEPTION_ROLLUPS,

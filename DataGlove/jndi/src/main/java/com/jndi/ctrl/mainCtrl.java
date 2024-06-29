@@ -1,5 +1,8 @@
 package com.jndi.ctrl;
 
+import java.io.IOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.sql.Date;
 import java.sql.SQLException;
 import java.text.DateFormat;
@@ -14,13 +17,21 @@ import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 
 import com.jndi.csvgenerate.csvgenerator;
+import com.jndi.model.ApplicationLogs;
+import com.jndi.model.Login;
+import com.jndi.model.ProcessRegistry;
+import com.jndi.model.RawQueryFilters;
 import com.jndi.model.TableFilters;
 import com.jndi.model.tableFromDate;
 import com.jndi.serv.JdbcService;
@@ -31,9 +42,11 @@ import oracle.sql.DATE;
 @CrossOrigin(origins="*",allowedHeaders="*")
 @RestController
 public class mainCtrl {
+	Logger logger=LoggerFactory.getLogger(mainCtrl.class);
 	
 	TableFilters tbfl;
-	
+	ApplicationLogs appLogs;
+	ProcessRegistry registryFilters;
 		
 	@Autowired
 	private Serv s;
@@ -45,14 +58,96 @@ public class mainCtrl {
     private ServletContext servletContext;
 	
 	@Autowired
+	private Environment env;
+	
+	@Autowired
 	private JdbcService js;
+	private Login loginDetails;
 	
 	private String tbl[];
+	public static boolean loaderStatus;
+	public static String downloadFormat;
+	private RawQueryFilters rawQueryFilters;	
 	
 	Map<String,Date> fromDate=new HashMap<String,Date>();
 	Map<String,Date> toDate=new HashMap<String,Date>();
 	Map<String,Integer> bufferDays=new HashMap<String,Integer>();
 	
+	//next two method are for exception propagation
+	@RequestMapping(path="ExceptionStatus")
+	public boolean isDataPresent() {
+		return s.exceptionFlag;
+	}
+	
+	@RequestMapping(path="noDataTables")
+	public String[] noDataTables() {
+		System.out.println("tables with no data are "+Arrays.toString(Serv.noDataTables));
+		return Serv.noDataTables;
+	}	
+	
+	
+	@RequestMapping(path="applicatoinLogsFilters")
+	public int appLogsFilters(@RequestBody ApplicationLogs applogs) {
+		System.out.println("received application logs filters and date selected is "+applogs.getFromDate());
+		this.appLogs=applogs;
+		return 200;
+	}
+	
+	@RequestMapping(path="processRegistryFilters")
+	public int processRegistryFilters(@RequestBody ProcessRegistry registryFilters) {
+		this.registryFilters=registryFilters;
+		System.out.println("process registry start date is "+registryFilters.getFromDate());
+		return 200;
+	}
+	
+	@RequestMapping("/setDownloadFormat")
+	public void setDownloadFormat(@RequestBody String downloadFormat) {
+		System.out.println("download format is ---------------------- "+downloadFormat);
+		this.downloadFormat=downloadFormat;
+	}
+	
+	@RequestMapping("/rawQuery")
+	public int downloadRawQuery(HttpServletResponse hsr) throws IOException {
+		System.out.println("request received and the query is "+rawQueryFilters.getQuery());
+		String resp=s.runRawQuery(rawQueryFilters.getQuery(),hsr);
+		if(this.rawQueryFilters.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.rawQueryFilters.getCaseNumber())); 
+		}
+		return 200;
+	}
+	
+	@RequestMapping("/customQuery")
+	public int runRawQuery(@RequestBody RawQueryFilters rawQueryFilters) throws IOException {
+		this.rawQueryFilters=rawQueryFilters;
+		return 200;
+	}
+	
+	@RequestMapping("/connectoinDetails")
+	public int connectionDetails(@RequestBody Login loginDetails) {
+		logger.info("received login creds are username : "+loginDetails.getUsername()+" password : "+loginDetails.getPassword()+" company name : "+loginDetails.getCompany());
+		System.out.println("received login creds are username : "+loginDetails.getUsername()+" password : "+loginDetails.getPassword()+" company name : "+loginDetails.getCompany());
+		this.loginDetails=loginDetails;
+		
+		return 200;
+	}
+	@RequestMapping("LoaderStatus")
+	public boolean getLoaderStatus() {
+		logger.info("sending loader status, which is "+this.loaderStatus);
+		System.out.println("sending loader status, which is "+this.loaderStatus);
+		return this.loaderStatus;
+	}
+	@RequestMapping("SetLoaderStatus")
+	public boolean setLoaderStatus(@RequestBody boolean status) {
+		this.loaderStatus=status;
+		logger.info("setting the loader status to "+this.loaderStatus);
+		System.out.println("setting the loader status to "+this.loaderStatus);
+		return this.loaderStatus;
+	}
+	@RequestMapping("attachToServiceNow")
+	public int attachmentToServiceNow(@RequestBody String caseNumber) {
+		logger.info("Attaching to the service now case");
+		return s.attachmentsToCase(caseNumber);
+	}
 	
 	/*@RequestMapping("MDMSDataTables") 
 	public List<String[]> resOneByOne1(HttpServletResponse hsr) {
@@ -91,15 +186,110 @@ public class mainCtrl {
 		toDate.put(tfd.getTableName().toUpperCase(), tfd.getFromDate());
 		return 200;
 	}
-	@RequestMapping("MDMSDataTables") 
+	@RequestMapping(path="applicationLogsData")
+	public int applicationLogsData(HttpServletResponse hsr) {
+		logger.info("fetching the Process Registry tables");
+		this.loaderStatus=true;
+		logger.info("setting the loader status to "+this.loaderStatus);
+		logger.info("request is received on backend to MDMSDataTables");
+		//System.out.println("case number is "+tbfl.getCaseNumber()+"");
+		s.queryApplicationLogData(this.appLogs,hsr);
+		if(this.tbfl.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+		}
+		
+		this.loaderStatus=false;
+		System.out.println("setting the loader status to "+this.loaderStatus);
+		return 200;
+	}
+	@RequestMapping(path="processRegistryData")
+	public int processRegistryData(HttpServletResponse hsr) {
+		logger.info("fetching the Process Registry tables");
+		this.loaderStatus=true;
+		logger.info("setting the loader status to "+this.loaderStatus);
+		logger.info("request is received on backend to MDMSDataTables");
+		//System.out.println("case number is "+tbfl.getCaseNumber()+"");
+		s.queryProcessRegistryData(this.registryFilters,hsr);
+		if(this.tbfl.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+		}
+		
+		this.loaderStatus=false;
+		System.out.println("setting the loader status to "+this.loaderStatus);
+		return 200;
+	}
+	@RequestMapping("ExceptionManagementTables") 
 	public void resOneByOne1(HttpServletResponse hsr) {
-		 s.queryforData(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+		logger.info("fetching the exception management tables");
+		mainCtrl.loaderStatus=true;
+		logger.info("setting the loader status to "+mainCtrl.loaderStatus);
+		logger.info("request is received on backend to MDMSDataTables");
+		//System.out.println("case number is "+tbfl.getCaseNumber()+"");
+		s.queryExceptionManagementData(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+	
+		if(this.tbfl.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+		}
+		
+		mainCtrl.loaderStatus=false;
+		System.out.println("setting the loader status to "+mainCtrl.loaderStatus);
 		
 	}
+	
+	@RequestMapping("ODETables") 
+	public int odeTables(HttpServletResponse hsr) {
+		System.out.println("request is received on backend to MDMSDataTables");
+		//System.out.println("case number is "+tbfl.getCaseNumber()+"");
+		s.queryOdeData(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+		if(this.tbfl.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+		}
+		return 200;
+	}
+	
 	@RequestMapping("VEETables") 
 	public void resOneByOne2(HttpServletResponse hsr) {
 		 s.queryVeeData(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+			if(this.tbfl.getCaseNumber()!=null) {
+				System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+			}
+	}
+	@RequestMapping("IECExtractsBillingWindowTables") 
+	public void iecExtractsBillingWindow(HttpServletResponse hsr) {
+		 s.queryIecExtractBillingWindowData(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+			if(this.tbfl.getCaseNumber()!=null) {
+				System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+			}
+	}
+	@RequestMapping("DSERealTimeTables") 
+	public void dseRealTime(HttpServletResponse hsr) {
+		 s.queryDseRealtimeData(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
 		
+			if(this.tbfl.getCaseNumber()!=null) {
+				System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+			}
+	}
+	@RequestMapping("DataHubTables")
+	public void dataHubServiceImpl(HttpServletResponse hsr) {
+		s.dataHubServiceImpl(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+		if(this.tbfl.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+		}
+	}
+	@RequestMapping("EmedReadProcessingBatch")
+	public void emedReadProBatchServiceImpl(HttpServletResponse hsr) {
+		s.emedReadProBatchServiceImpl(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+		if(this.tbfl.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+		}
+	}
+	@RequestMapping("DgmMaterializerTables")
+	public void dgmMaterializerTablesServiceImpl(HttpServletResponse hsr) {
+		s.dgmMaterializerServiceImpl(this.bufferDays,this.fromDate,this.toDate,tbfl,hsr);
+		
+		if(this.tbfl.getCaseNumber()!=null) {
+			System.out.println("response from attachment to case is "+s.attachmentsToCase(this.tbfl.getCaseNumber())); 
+		}
 	}
 	
 	
@@ -239,7 +429,7 @@ public class mainCtrl {
 	}
 	@RequestMapping(path="tablefilters")
 	public int tableFilters(@RequestBody TableFilters filters) {
-		System.out.println("received the table filters and they are "+filters.getBufferDays());
+		System.out.println("received the table filters and they are "+filters.toString());
 		this.fromDate=new HashMap<String,Date>();
 		this.toDate=new HashMap<String,Date>();
 		this.bufferDays=new HashMap<String,Integer>();
